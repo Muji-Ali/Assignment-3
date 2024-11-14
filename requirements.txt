@@ -1,2 +1,2 @@
-beautifulsoap4
+beautifulsoup4
 nltk
