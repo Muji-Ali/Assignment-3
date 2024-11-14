@@ -9,7 +9,7 @@ from collections import defaultdict, Counter
 # Initialize the Porter Stemmer
 stemmer = PorterStemmer()
 
-base_path = '/Users/muji/Desktop/ANALYST'
+base_path = '/Users/muji/Downloads/ANALYST'
 
 # Function to process content of document
 def process_content(content):
