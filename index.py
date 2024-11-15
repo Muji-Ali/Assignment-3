@@ -9,12 +9,14 @@ from collections import defaultdict, Counter
 # Initialize the Porter Stemmer
 stemmer = PorterStemmer()
 
-base_path = '/Users/muji/Downloads/ANALYST'
+# Set base_path to the location of your ANALYST folder
+base_path = '/Users/your_username/Desktop/ANALYST'  # Update this path as needed
 
 # Function to process content of document
 def process_content(content):
     soup = BeautifulSoup(content, 'html.parser')
     tokens = []
+
     important_texts = {
         "title": soup.title.string if soup.title else "",
         "headings": " ".join(h.get_text() for h in soup.find_all(['h1', 'h2', 'h3'])),
@@ -36,18 +38,11 @@ def process_content(content):
 def build_inverted_index():
     inverted_index = defaultdict(lambda: defaultdict(int))
 
-    # Ensure base_path is correct and exists
-    if not os.path.exists(base_path):
-        print(f"Base path does not exist: {base_path}")
-        return None
-
-    # Go through each domain directory
     for domain_folder in os.listdir(base_path):
         domain_path = os.path.join(base_path, domain_folder)
         if not os.path.isdir(domain_path):
             continue
-
-        # Process each file in the domain
+        
         for file_name in os.listdir(domain_path):
             file_path = os.path.join(domain_path, file_name)
             try:
@@ -65,38 +60,40 @@ def build_inverted_index():
 
                     for token, frequency in term_counts.items():
                         inverted_index[token][doc_id] += frequency
-            except Exception as e:
-                print(f"Error processing file {file_name}: {e}")
-                continue
+            except (json.JSONDecodeError, KeyError) as e:
+                print(f"Error processing file {file_path}: {e}")
+                continue  # Skip this file if there's an error
 
     return inverted_index
 
 # Build the inverted index
 inverted_index = build_inverted_index()
 
-if inverted_index is None:
-    print("Failed to build inverted index. Check the data or logic.")
-else:
-    # Save the inverted index to a JSON file
-    output_path = './inverted_index.json'
-    with open(output_path, 'w', encoding='utf-8') as out_file:
-        json.dump(inverted_index, out_file)
+# Save the inverted index to a JSON file
+output_path = './inverted_index.json'
+with open(output_path, 'w', encoding='utf-8') as out_file:
+    json.dump(inverted_index, out_file)
 
-    print(f"Inverted index saved to {output_path}")
+print(f"Inverted index saved to {output_path}")
 
-    # Analytics Section
-    # 1. Number of Indexed Documents
-    num_documents = len(inverted_index)
-    print(f"Number of Indexed Documents: {num_documents}")
+# Analytics Section
 
-    # 2. Number of Unique Tokens
-    unique_tokens = set()
-    for tokens in inverted_index.values():
-        unique_tokens.update(tokens)
-    num_unique_tokens = len(unique_tokens)
-    print(f"Number of Unique Tokens: {num_unique_tokens}")
+index_path = './inverted_index.json'
+with open(index_path, 'r', encoding='utf-8') as file:
+    inverted_index = json.load(file)
 
-    # 3. Total Size of the Index
-    index_size = os.path.getsize(output_path) / 1024  # Size in KB
-    print(f"Total Size of Index: {index_size:.2f} KB")
+# Number of indexed documents
+document_ids = set()
+for postings in inverted_index.values():
+    document_ids.update(postings.keys())
+num_documents = len(document_ids)
 
+# Number of unique tokens
+num_tokens = len(inverted_index)
+
+# Total size of the index on disk (in KB)
+index_size_kb = os.path.getsize(index_path) / 1024
+
+print(f"Number of indexed documents: {num_documents}")
+print(f"Number of unique tokens: {num_tokens}")
+print(f"Total index size on disk: {index_size_kb:.2f} KB")
