@@ -9,6 +9,7 @@ from collections import defaultdict, Counter
 # Initialize the Porter Stemmer
 stemmer = PorterStemmer()
 
+# Update this to your correct base path
 base_path = '/Users/muji/Downloads/ANALYST'
 
 # Function to process content of document
@@ -71,33 +72,17 @@ with open(output_path, 'w', encoding='utf-8') as out_file:
     json.dump(inverted_index, out_file)
 
 print(f"Inverted index saved to {output_path}")
-# Your existing code here (imports, functions, etc.)
-
-def build_inverted_index():
-    # Build your inverted index logic here
-    pass
-
-# Build the inverted index
-inverted_index = build_inverted_index()
 
 # Analytics Section
-import os
-
 # 1. Number of Indexed Documents
 num_documents = len(inverted_index)
 print(f"Number of Indexed Documents: {num_documents}")
 
 # 2. Number of Unique Tokens
-unique_tokens = set()
-for tokens in inverted_index.values():
-    unique_tokens.update(tokens)
+unique_tokens = set(inverted_index.keys())
 num_unique_tokens = len(unique_tokens)
 print(f"Number of Unique Tokens: {num_unique_tokens}")
 
 # 3. Total Size of the Index
-index_size = os.path.getsize("inverted_index.json") / 1024  # Size in KB
+index_size = os.path.getsize(output_path) / 1024  # Size in KB
 print(f"Total Size of Index: {index_size:.2f} KB")
-
-# Save the inverted index to JSON
-with open('inverted_index.json', 'w') as f:
-    json.dump(inverted_index, f)
