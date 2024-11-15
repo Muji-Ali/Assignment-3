@@ -78,22 +78,25 @@ print(f"Inverted index saved to {output_path}")
 
 # Analytics Section
 
-index_path = './inverted_index.json'
+index_path = '/Users/muji/Downloads/Assignment-3/Assignment-3/inverted_index.json'
+
+# Read the inverted index from the file
 with open(index_path, 'r', encoding='utf-8') as file:
     inverted_index = json.load(file)
 
-# Number of indexed documents
+# 1. Number of Indexed Documents
 document_ids = set()
 for postings in inverted_index.values():
-    document_ids.update(postings.keys())
+    document_ids.update(postings.keys())  # Update with document IDs
 num_documents = len(document_ids)
 
-# Number of unique tokens
-num_tokens = len(inverted_index)
+# 2. Number of Unique Tokens
+num_tokens = len(inverted_index)  # Number of unique terms
 
-# Total size of the index on disk (in KB)
-index_size_kb = os.path.getsize(index_path) / 1024
+# 3. Total Size of the Index on Disk (in KB)
+index_size_kb = os.path.getsize(index_path) / 1024  # Size in KB
 
+# Print Analytics
 print(f"Number of indexed documents: {num_documents}")
 print(f"Number of unique tokens: {num_tokens}")
 print(f"Total index size on disk: {index_size_kb:.2f} KB")
