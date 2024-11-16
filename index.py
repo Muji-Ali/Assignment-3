@@ -7,7 +7,7 @@ import math
 import sys
 
 # Set base_path to the location of your ANALYST folder
-base_path = '/Users/muji/Downloads/Assignment-3/Assignment-3/analyst_dataset'  # Updated base path
+base_path = '/Users/muji/Downloads/ANALYST'  # Updated base path
 
 # Initialize the stemmer
 stemmer = PorterStemmer()
