@@ -90,8 +90,12 @@ for postings in inverted_index.values():
     document_ids.update(postings.keys())  # Update with document IDs
 num_documents = len(document_ids)
 
-# 2. Number of Unique Tokens
-num_tokens = len(inverted_index)  # Number of unique terms
+# # 2. Number of Unique Tokens
+try:
+    num_tokens = len(inverted_index)  # Number of unique terms in the index
+    print(f"Number of unique tokens: {num_tokens}")
+except Exception as e:
+    print(f"Error calculating the number of unique tokens: {e}")
 
 # 3. Total Size of the Index on Disk (in KB)
 index_size_kb = os.path.getsize(index_path) / 1024  # Size in KB
