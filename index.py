@@ -6,6 +6,9 @@ from collections import defaultdict
 import math
 import sys
 
+# Set base_path to the location of your ANALYST folder
+base_path = '/Users/muji/Downloads/Assignment-3/Assignment-3/analyst_dataset'  # Updated base path
+
 # Initialize the stemmer
 stemmer = PorterStemmer()
 
@@ -70,7 +73,10 @@ def generate_analytics(index, num_docs, output_file):
     }
 
 # Main function to run the process
-def main(input_folder, output_file):
+def main():
+    input_folder = base_path  # Using the base_path set earlier
+    output_file = "inverted_index.json"
+    
     print("Building the inverted index...")
     inverted_index, num_docs, num_tokens = build_inverted_index(input_folder)
 
@@ -84,8 +90,6 @@ def main(input_folder, output_file):
     for key, value in analytics.items():
         print(f"{key}: {value}")
 
-# Example usage
+# Run the main function
 if __name__ == "__main__":
-    input_folder = "path/to/analyst_dataset"  # Change to your dataset folder
-    output_file = "inverted_index.json"
-    main(input_folder, output_file)
+    main()
