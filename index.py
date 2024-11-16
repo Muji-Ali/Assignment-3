@@ -1,106 +1,91 @@
 import os
 import json
 import re
-from bs4 import BeautifulSoup
 from nltk.stem import PorterStemmer
-from nltk.tokenize import word_tokenize
-from collections import defaultdict, Counter
+from collections import defaultdict
+import math
+import sys
 
-# Initialize the Porter Stemmer
+# Initialize the stemmer
 stemmer = PorterStemmer()
 
-# Set base_path to the location of your ANALYST folder
-base_path = '/Users/muji/Downloads/ANALYST'  # Update this path as needed
+# Helper function: Tokenize and stem content
+def tokenize_and_stem(text):
+    # Remove non-alphanumeric characters and split
+    tokens = re.findall(r'\b\w+\b', text.lower())
+    # Stem each token
+    return [stemmer.stem(token) for token in tokens]
 
-# Function to process content of document
-def process_content(content):
-    soup = BeautifulSoup(content, 'html.parser')
-    tokens = []
+# Function to build the inverted index
+def build_inverted_index(input_folder):
+    inverted_index = defaultdict(list)
+    doc_lengths = {}
+    doc_id = 0
 
-    important_texts = {
-        "title": soup.title.string if soup.title else "",
-        "headings": " ".join(h.get_text() for h in soup.find_all(['h1', 'h2', 'h3'])),
-        "bold": " ".join(b.get_text() for b in soup.find_all(['b', 'strong']))
+    for root, _, files in os.walk(input_folder):
+        for file in files:
+            if file.endswith('.json'):
+                filepath = os.path.join(root, file)
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    try:
+                        data = json.load(f)
+                        content = data.get("content", "")
+                        url = data.get("url", "")
+                        
+                        if not content:
+                            continue
+
+                        doc_id += 1
+                        tokens = tokenize_and_stem(content)
+                        term_freq = defaultdict(int)
+
+                        # Calculate term frequency for the document
+                        for token in tokens:
+                            term_freq[token] += 1
+
+                        # Normalize term frequency
+                        doc_length = sum(term_freq.values())
+                        doc_lengths[doc_id] = doc_length
+                        for token, freq in term_freq.items():
+                            tf = freq / doc_length
+                            inverted_index[token].append((doc_id, tf))
+                    
+                    except json.JSONDecodeError:
+                        print(f"Error reading file: {filepath}", file=sys.stderr)
+
+    return inverted_index, doc_id, len(inverted_index)
+
+# Function to save index to disk
+def save_index_to_disk(index, output_file):
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(index, f)
+
+# Function to generate analytics
+def generate_analytics(index, num_docs, output_file):
+    index_size = os.path.getsize(output_file) / 1024  # in KB
+    return {
+        "Number of indexed documents": num_docs,
+        "Number of unique tokens": len(index),
+        "Total index size (KB)": round(index_size, 2)
     }
 
-    for tag, text in important_texts.items():
-        for word in word_tokenize(text):
-            if re.match(r'^\w+$', word):
-                tokens.append((stemmer.stem(word.lower()), tag))
+# Main function to run the process
+def main(input_folder, output_file):
+    print("Building the inverted index...")
+    inverted_index, num_docs, num_tokens = build_inverted_index(input_folder)
 
-    for word in word_tokenize(soup.get_text()):
-        if re.match(r'^\w+$', word):
-            tokens.append((stemmer.stem(word.lower()), "general"))
+    print(f"Saving the index to {output_file}...")
+    save_index_to_disk(inverted_index, output_file)
 
-    return tokens
+    print("Generating analytics...")
+    analytics = generate_analytics(inverted_index, num_docs, output_file)
+    
+    print("\nAnalytics Report:")
+    for key, value in analytics.items():
+        print(f"{key}: {value}")
 
-# Function to build inverted index
-def build_inverted_index():
-    inverted_index = defaultdict(lambda: defaultdict(int))
-
-    for domain_folder in os.listdir(base_path):
-        domain_path = os.path.join(base_path, domain_folder)
-        if not os.path.isdir(domain_path):
-            continue
-        
-        for file_name in os.listdir(domain_path):
-            file_path = os.path.join(domain_path, file_name)
-            try:
-                with open(file_path, 'r', encoding='utf-8') as file:
-                    data = json.load(file)
-                    content = data.get("content", "")
-                    doc_id = file_name
-
-                    tokens = process_content(content)
-
-                    term_counts = Counter()
-                    for token, tag in tokens:
-                        weight = 3 if tag in ["title", "headings", "bold"] else 1
-                        term_counts[token] += weight
-
-                    for token, frequency in term_counts.items():
-                        inverted_index[token][doc_id] += frequency
-            except (json.JSONDecodeError, KeyError) as e:
-                print(f"Error processing file {file_path}: {e}")
-                continue  # Skip this file if there's an error
-
-    return inverted_index
-
-# Build the inverted index
-inverted_index = build_inverted_index()
-
-# Save the inverted index to a JSON file
-output_path = './inverted_index.json'
-with open(output_path, 'w', encoding='utf-8') as out_file:
-    json.dump(inverted_index, out_file)
-
-print(f"Inverted index saved to {output_path}")
-
-# Analytics Section
-
-index_path = '/Users/muji/Downloads/Assignment-3/Assignment-3/inverted_index.json'
-
-# Read the inverted index from the file
-with open(index_path, 'r', encoding='utf-8') as file:
-    inverted_index = json.load(file)
-
-# 1. Number of Indexed Documents
-document_ids = set()
-for postings in inverted_index.values():
-    document_ids.update(postings.keys())  # Update with document IDs
-num_documents = len(document_ids)
-
-# # 2. Number of Unique Tokens
-try:
-    num_tokens = len(inverted_index)  # Number of unique terms in the index
-    print(f"Number of unique tokens: {num_tokens}")
-except Exception as e:
-    print(f"Error calculating the number of unique tokens: {e}")
-
-# 3. Total Size of the Index on Disk (in KB)
-index_size_kb = os.path.getsize(index_path) / 1024  # Size in KB
-
-# Print Analytics
-print(f"Number of indexed documents: {num_documents}")
-print(f"Number of unique tokens: {num_tokens}")
-print(f"Total index size on disk: {index_size_kb:.2f} KB")
+# Example usage
+if __name__ == "__main__":
+    input_folder = "path/to/analyst_dataset"  # Change to your dataset folder
+    output_file = "inverted_index.json"
+    main(input_folder, output_file)
