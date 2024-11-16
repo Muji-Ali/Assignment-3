@@ -1,160 +1,102 @@
 import os
 import json
-from lxml import html
-from collections import defaultdict
-from string import punctuation
 import re
+from bs4 import BeautifulSoup
+from nltk.stem import PorterStemmer
+from nltk.tokenize import word_tokenize
+from collections import defaultdict, Counter
 
+stemmer = PorterStemmer()
 
-class PorterStemmer:
-    #Simple Porter Stemmer implementation
-    def __init__(self):
-        self.suffixes = ['ing', 'ed', 'ly', 'es', 's', 'er', 'ion']
+base_path = '/Users/muji/Downloads/ANALYST' 
+# Function to process content of document
+def process_content(content):
+    soup = BeautifulSoup(content, 'html.parser')
+    tokens = []
 
-    def stem(self, word):
-        for suffix in self.suffixes:
-            if word.endswith(suffix) and len(word) > len(suffix):
-                return word[:-len(suffix)]
-        return word
+    important_texts = {
+        "title": soup.title.string if soup.title else "",
+        "headings": " ".join(h.get_text() for h in soup.find_all(['h1', 'h2', 'h3'])),
+        "bold": " ".join(b.get_text() for b in soup.find_all(['b', 'strong']))
+    }
 
+    for tag, text in important_texts.items():
+        for word in word_tokenize(text):
+            if re.match(r'^\w+$', word):
+                tokens.append((stemmer.stem(word.lower()), tag))
 
-class InvertedIndexBuilder:
-    def __init__(self, input_folder, output_folder, batch_size=100):
-        self.input_folder = input_folder
-        self.output_folder = output_folder
-        self.inverted_index = defaultdict(list)
-        self.doc_id_map = {}
-        self.batch_size = batch_size
-        self.processed_files = 0
-        self.partial_index_count = 0
-        self.global_unique_tokens = set()  # Track unique tokens globally
-        self.stemmer = PorterStemmer()
-        os.makedirs(output_folder, exist_ok=True)
+    for word in word_tokenize(soup.get_text()):
+        if re.match(r'^\w+$', word):
+            tokens.append((stemmer.stem(word.lower()), "general"))
 
-    def tokenize(self, text):
-        """Custom tokenizer to split text into words.
-           Remove punctuation and split by whitespace"""
+    return tokens
 
-        return [token.lower() for token in re.split(r'\W+', text) if token]
+def build_inverted_index():
+    inverted_index = defaultdict(lambda: defaultdict(int))
 
-    def preprocess_content(self, content):
-        """Preprocess HTML content to ensure compatibility with lxml."""
-        if isinstance(content, str):
-            return content.encode('utf-8')
-        return content
+    for domain_folder in os.listdir(base_path):
+        domain_path = os.path.join(base_path, domain_folder)
+        if not os.path.isdir(domain_path):
+            continue
+        
+        for file_name in os.listdir(domain_path):
+            file_path = os.path.join(domain_path, file_name)
+            try:
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    data = json.load(file)
+                    content = data.get("content", "")
+                    doc_id = file_name
 
-    def parse_html(self, content):
-        """Parse HTML content and extract tokens."""
-        try:
-            content = self.preprocess_content(content)
-            tree = html.fromstring(content)
-            text_segments = tree.xpath("//body//text()")
-            tokens = []
-            for segment in text_segments:
-                tokens.extend(self.tokenize(segment))
-            return tokens
-        except Exception as e:
-            print(f"Error parsing HTML: {e}")
-            return []
+                    tokens = process_content(content)
 
-    def process_file(self, file_path, doc_id):
-        """Process a single HTML file and update the index."""
-        try:
-            with open(file_path, 'r', encoding='utf-8') as file:
-                data = json.load(file)
-                content = data.get("content", "")
-                tokens = self.parse_html(content)
-                stemmed_tokens = [self.stemmer.stem(token) for token in tokens]
+                    term_counts = Counter()
+                    for token, tag in tokens:
+                        weight = 3 if tag in ["title", "headings", "bold"] else 1
+                        term_counts[token] += weight
 
-                # Add tokens to the global unique set
-                self.global_unique_tokens.update(stemmed_tokens)
+                    for token, frequency in term_counts.items():
+                        inverted_index[token][doc_id] += frequency
+            except (json.JSONDecodeError, KeyError) as e:
+                print(f"Error processing file {file_path}: {e}")
+                continue  # Skip this file if there's an error
 
-                # Calculate term frequencies
-                tf = defaultdict(int)
-                for token in stemmed_tokens:
-                    tf[token] += 1
+    return inverted_index
 
-                max_tf = max(tf.values(), default=1)
-                for token, freq in tf.items():
-                    normalized_tf = freq / max_tf
-                    self.inverted_index[token].append({"docID": doc_id, "tf": normalized_tf})
+# Build the inverted index
+inverted_index = build_inverted_index()
 
-                print(f"Processed file {file_path} with {len(tokens)} tokens.")
-        except Exception as e:
-            print(f"Error processing file {file_path}: {e}")
+# Save the inverted index to a JSON file
+output_path = './inverted_index.json'
+with open(output_path, 'w', encoding='utf-8') as out_file:
+    json.dump(inverted_index, out_file)
 
-    def write_partial_index(self):
-        """Write the current inverted index to a partial file."""
-        try:
-            file_path = os.path.join(self.output_folder, f"partial_index_{self.partial_index_count}.json")
-            with open(file_path, "w", encoding="utf-8") as file:
-                json.dump(self.inverted_index, file, indent=4)
-            print(f"Partial index written to {file_path}.")
-            self.partial_index_count += 1
-        except Exception as e:
-            print(f"Error writing partial index: {e}")
+print(f"Inverted index saved to {output_path}")
 
-    def build_index(self):
-        """Build the inverted index by processing all files."""
-        doc_id = 0
-        for root, _, files in os.walk(self.input_folder):
-            for file in files:
-                if not file.endswith(".json"):
-                    continue
+# Analytics Section
 
-                file_path = os.path.join(root, file)
-                self.doc_id_map[doc_id] = file_path
-                self.process_file(file_path, doc_id)
-                doc_id += 1
-                self.processed_files += 1
+index_path = '/Users/muji/Downloads/Assignment-3/Assignment-3/inverted_index.json'
 
-                if self.processed_files >= self.batch_size:
-                    self.write_partial_index()
-                    self.inverted_index.clear()
-                    self.processed_files = 0
+# Read the inverted index from the file
+with open(index_path, 'r', encoding='utf-8') as file:
+    inverted_index = json.load(file)
 
-        if self.inverted_index:
-            self.write_partial_index()
+# 1. Number of Indexed Documents
+document_ids = set()
+for postings in inverted_index.values():
+    document_ids.update(postings.keys())  # Update with document IDs
+num_documents = len(document_ids)
 
-    def save_doc_id_map(self):
-        """Save the document ID map."""
-        try:
-            file_path = os.path.join(self.output_folder, "doc_id_map.json")
-            with open(file_path, "w", encoding="utf-8") as file:
-                json.dump(self.doc_id_map, file, indent=4)
-            print(f"Document ID map saved to {file_path}.")
-        except Exception as e:
-            print(f"Error saving document ID map: {e}")
+# # 2. Number of Unique Tokens
+try:
+    num_tokens = len(inverted_index)  # Number of unique terms in the index
+    print(f"Number of unique tokens: {num_tokens}")
+except Exception as e:
+    print(f"Error calculating the number of unique tokens: {e}")
 
-    def generate_analytics(self):
-        """Generate and print analytics"""
-        try:
-            num_docs = len(self.doc_id_map)
-            unique_tokens = len(self.global_unique_tokens)
-            total_size_kb = sum(
-                os.path.getsize(os.path.join(self.output_folder, f))
-                for f in os.listdir(self.output_folder)
-                if f.startswith("partial_index_")
-            ) / 1024
-            analytics = {
-                "Number of indexed documents": num_docs,
-                "Number of unique tokens": unique_tokens,
-                "Total size of the index (KB)": total_size_kb,
-            }
-            print("Analytics:", analytics)
-            return analytics
-        except Exception as e:
-            print(f"Error generating analytics: {e}")
-            return {}
+# 3. Total Size of the Index on Disk (in KB)
+index_size_kb = os.path.getsize(index_path) / 1024  # Size in KB
 
-
-#Testing
-input_folder = "/Users/joshnguyen/PycharmProjects/CS121Assignment3M1/DEV"
-output_folder = "/Users/joshnguyen/PycharmProjects/CS121Assignment3M1/output"
-
-index_builder = InvertedIndexBuilder(input_folder, output_folder, batch_size=100)
-index_builder.build_index()
-index_builder.save_doc_id_map()
-
-# Generate Report
-analytics = index_builder.generate_analytics()
+# Print Analytics
+print(f"Number of indexed documents: {num_documents}")
+print(f"Number of unique tokens: {num_tokens}")
+print(f"Total index size on disk: {index_size_kb:.2f} KB")
